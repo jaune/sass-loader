@@ -2,16 +2,16 @@ var utils = require('loader-utils');
 var sass = require('node-sass');
 var path = require('path');
 var sassGraph = require('sass-graph');
+var spawn = require('win-spawn');
 
 module.exports = function (content) {
     this.cacheable();
     var callback = this.async();
 
     var opt = utils.parseQuery(this.query);
-    opt.data = content;
 
     // skip empty files, otherwise it will stop webpack, see issue #21
-    if (opt.data.trim() === '') {
+    if (content.trim() === '') {
         return callback(null, content);
     }
 
@@ -38,15 +38,39 @@ module.exports = function (content) {
         } 
     }.bind(this);
 
-    opt.success = function (result) {
-        markDependencies();
-        callback(null, result.css, result.map);
-    }.bind(this);
+    var sass_bin = 'sass';
+    var sass_args = ['--stdin', '--no-cache', '--scss'];
 
-    opt.error = function (err) {
-        markDependencies();
-        callback({message: err.message + ' (' + err.line + ':' + err.column + ')'});
-    }.bind(this);
+    loadPaths.forEach(function (path) {
+        sass_args.push('-I');
+        sass_args.push(path);
+    });
 
-    sass.render(opt);
+    var sass_process = spawn(sass_bin, sass_args);
+
+    var sass_out = '';
+    var sass_err = '';
+
+    sass_process.stdout.on('data', function (data) {
+        sass_out += data;
+    });
+
+    sass_process.stderr.on('data', function (data) {
+        sass_err += data;
+    });
+
+
+    sass_process.on('error', function () {
+        markDependencies();
+        callback({message: 'sass fail.' +' :::: '+ sass_err });
+    });
+    sass_process.on('close', function (code) {
+        markDependencies();
+        if (code > 0) {
+          return callback({message: 'sass fail. ('+code+')' +' :::: '+ sass_err });
+        }
+        callback(null, sass_out);
+    });
+
+    sass_process.stdin.end(content);
 };

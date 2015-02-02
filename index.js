@@ -1,5 +1,4 @@
 var utils = require('loader-utils');
-var sass = require('node-sass');
 var path = require('path');
 var sassGraph = require('sass-graph');
 var spawn = require('win-spawn');
